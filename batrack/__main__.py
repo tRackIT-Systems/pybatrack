@@ -14,7 +14,7 @@ import time
 import platform
 import glob
 from distutils.util import strtobool
-from typing import List, Union
+from typing import List, Union, Literal
 import paho.mqtt.client as mqtt
 
 import schedule
@@ -31,14 +31,14 @@ class BatRack(threading.Thread):
         name: str = "default",
         data_path: str = "data",
         duty_cycle_s: int = 10,
-        use_vhf: Union[bool, str] = True,
-        use_audio: Union[bool, str] = True,
-        use_camera: Union[bool, str] = True,
-        use_timed_camera: Union[bool, str] = True,
-        use_trigger_vhf: Union[bool, str] = True,
-        use_trigger_audio: Union[bool, str] = True,
-        use_trigger_camera: Union[bool, str] = True,
-        always_on: Union[bool, str] = False,
+        use_vhf: Union[bool, Literal[0, 1], str] = True,
+        use_audio: Union[bool, Literal[0, 1], str] = True,
+        use_camera: Union[bool, Literal[0, 1], str] = True,
+        use_timed_camera: Union[bool, Literal[0, 1], str] = True,
+        use_trigger_vhf: Union[bool, Literal[0, 1], str] = True,
+        use_trigger_audio: Union[bool, Literal[0, 1], str] = True,
+        use_trigger_camera: Union[bool, Literal[0, 1], str] = True,
+        always_on: Union[bool, Literal[0, 1], str] = False,
         mqtt_host: str = "localhost",
         mqtt_port: int = 1883,
         mqtt_keepalive: int = 60,
@@ -50,7 +50,7 @@ class BatRack(threading.Thread):
         # add hostname and  data path
         self.data_path: str = os.path.join(data_path, socket.gethostname(), self.__class__.__name__)
         os.makedirs(self.data_path, exist_ok=True)
-        logging.debug(f"data path: {self.data_path}")
+        logger.debug("Data path: %s", self.data_path)
         start_time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
         self.csvfile = open(os.path.join(self.data_path, f"{start_time_str}_{self.name}.csv"), "w")
         self.csv = csv.writer(self.csvfile)
@@ -69,7 +69,7 @@ class BatRack(threading.Thread):
         use_trigger_audio = strtobool(use_trigger_audio) if isinstance(use_trigger_audio, str) else bool(use_trigger_audio)
         use_trigger_camera = strtobool(use_trigger_camera) if isinstance(use_trigger_camera, str) else bool(use_trigger_camera)
 
-        self.always_on: bool = strtobool(always_on) if isinstance(always_on, str) else bool(always_on)
+        self.always_on: Union[bool, Literal[0, 1]] = strtobool(always_on) if isinstance(always_on, str) else bool(always_on)
 
         self.mqtt_host = str(mqtt_host)
         self.mqtt_port = int(mqtt_port)
@@ -81,7 +81,7 @@ class BatRack(threading.Thread):
         self.topic_prefix = f"{platform.node()}/mqttutil/trigger"
 
         # setup vhf
-        self.vhf: VHFAnalysisUnit = None
+        self.vhf: VHFAnalysisUnit
         if use_vhf:
             self.vhf = VHFAnalysisUnit(
                 **config["VHFAnalysisUnit"],
@@ -92,7 +92,7 @@ class BatRack(threading.Thread):
             self._units.append(self.vhf)
 
         # setup audio
-        self.audio: AudioAnalysisUnit = None
+        self.audio: AudioAnalysisUnit
         if use_audio:
             self.audio = AudioAnalysisUnit(
                 **config["AudioAnalysisUnit"],
@@ -103,7 +103,7 @@ class BatRack(threading.Thread):
             self._units.append(self.audio)
 
         # setup camera
-        self.camera: CameraAnalysisUnit = None
+        self.camera: CameraAnalysisUnit
         if use_camera:
             self.camera = CameraAnalysisUnit(
                 **config["CameraAnalysisUnit"],
@@ -117,8 +117,8 @@ class BatRack(threading.Thread):
         self._trigger: bool = False
 
     @staticmethod
-    def on_publish(userdata, result):
-        logger.info(f"data published: {userdata} with code {result}")
+    def on_publish(*args):
+        logger.info("data published: %s", args)
 
     def evaluate_triggers(self, callback_trigger: bool, message: str) -> bool:
         now_time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
@@ -132,12 +132,12 @@ class BatRack(threading.Thread):
 
         # if any of the used triggers fires, the system trigger is set
         for unit in self._units:
-            logger.debug(f"trigger evaluation {unit.__class__.__name__} use_trigger: {unit.use_trigger}, trigger: {unit.trigger}")
+            logger.debug("trigger evaluation %s use_trigger: %s, trigger: %s", unit.__class__.__name__, unit.use_trigger, unit.trigger)
             if unit.use_trigger:
                 if unit.trigger:
                     trigger = True
 
-        logger.debug(f"trigger evaluation, current state: {trigger}")
+        logger.debug("trigger evaluation, current state: %s", trigger)
 
         # start / stop recordings if the system trigger changed
         if trigger != self._trigger:
@@ -160,7 +160,7 @@ class BatRack(threading.Thread):
         self._running = True
 
         # start units
-        [unit.start() for unit in self._units if unit ]
+        [unit.start() for unit in self._units if unit]
 
         # do an initial trigger evaluation, also starts recordings when no trigger is used at all
         self.evaluate_triggers(False, "initial trigger")
@@ -169,9 +169,9 @@ class BatRack(threading.Thread):
         while self._running:
             for unit in self._units:
                 status_str = ", ".join([f"{k}: {'1' if v else '0'}" for k, v in unit.get_status().items()])
-                logger.info(f"{unit.__class__.__name__:20s}: {status_str}")
+                logger.info("%s: %s", unit.__class__.__name__, status_str)
                 if unit._running and not unit.is_alive():
-                    logger.warning(f"{unit.__class__.__name__} is not active, but should run; self-terminating")
+                    logger.warning("%s is not active, but should run; self-terminating", unit.__class__.__name__)
                     os.kill(os.getpid(), signal.SIGINT)
 
             time.sleep(self.duty_cycle_s)
@@ -211,35 +211,35 @@ if __name__ == "__main__":
     # configure logging
     logging_level = config["BatRack"].get("logging_level", "INFO")
     logging.basicConfig(level=logging_level)
-    logging.debug(f"logging level set to {logging_level}")
+    logger.debug("logging level set to %s", logging_level)
 
     lock = threading.Lock()
     instance = None
 
     def create_and_run(config, k, run_config):
-        logger.info(f"[{k}] waiting for remaining instance")
+        logger.info("[%s] waiting for remaining instance", k)
         lock.acquire()
 
-        logger.info(f"[{k}] creating instance")
+        logger.info("[%s] creating instance", k)
         global instance
         instance = BatRack(config, name=k, **run_config)
         instance.start()
-        logger.info(f"[{k}] started")
+        logger.info("[%s] started", k)
 
     def stop_and_remove(k):
-        logger.info(f"[{k}] stopping instance")
+        logger.info("[%s] stopping instance", k)
         global instance
         if instance:
             instance.stop()
             instance = None
             lock.release()
-        logger.info(f"[{k}] stopped")
+        logger.info("[%s] stopped", k)
 
     config_has_runs = 0
     now = datetime.datetime.now()
 
     # iterate through runs an enter schedulings
-    for k in config.keys():
+    for k, v in config.items():
         if not k.startswith("run"):
             continue
 
@@ -250,23 +250,23 @@ if __name__ == "__main__":
             start_s = schedule.every().day.at(run_config["start"])
             stop_s = schedule.every().day.at(run_config["stop"])
 
-            logger.info(f"[{k}] running from {run_config['start']} to {run_config['stop']}")
+            logger.info("[%s] running from %s to %s", k, run_config['start'], run_config['stop'])
 
             start_s.do(create_and_run, config, k, run_config)
             stop_s.do(stop_and_remove, k)
 
             if now.time() > start_s.at_time:
                 if now.time() < stop_s.at_time:
-                    logger.info(f"[{k}] starting run now (in interval)")
+                    logger.info("[%s] starting run now (in interval)", k)
                     create_and_run(config, k, run_config)
 
             config_has_runs += 1
 
         except KeyError as e:
-            logger.error(f"[{k}] is missing a {e} time, please check the configuration file ({args.configfile}).")
+            logger.error("[%s] is missing a %s time, please check the configuration file (%s).", k, e, args.configfile)
             sys.exit(1)
         except schedule.ScheduleValueError as e:
-            logger.error(f"[{k}] {e}, please check the configuration file ({args.configfile}).")
+            logger.error("[Ts] %s, please check the configuration file (%s).", k, e, args.configfile)
             sys.exit(1)
 
     running = True

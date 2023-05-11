@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import json
 import logging
@@ -6,11 +5,10 @@ import os
 import subprocess
 import threading
 import time
-import threading
 import wave
 import platform
 from distutils.util import strtobool
-from typing import Callable, Dict, List, Optional, Tuple, Union, Optional
+from typing import Callable, Dict, List, Optional, Tuple, Union, Literal
 from queue import Empty, Queue
 
 import gpiozero
@@ -18,8 +16,6 @@ import cbor2 as cbor
 import paho.mqtt.client as mqtt
 import numpy as np
 import pyaudio
-import schedule
-import subprocess
 
 from radiotracking import MatchedSignal
 from radiotracking.consume import uncborify
@@ -30,14 +26,14 @@ logger = logging.getLogger(__name__)
 class AbstractAnalysisUnit(threading.Thread):
     def __init__(
         self,
-        use_trigger: Union[str, bool],
+        use_trigger: Union[str, bool, Literal[0, 1]],
         trigger_callback: Callable,
         data_path: str = ".",
         **kwargs,
     ):
         super().__init__()
 
-        self.use_trigger: bool = strtobool(use_trigger) if isinstance(use_trigger, str) else bool(use_trigger)
+        self.use_trigger: Union[bool, Literal[0, 1]] = strtobool(use_trigger) if isinstance(use_trigger, str) else bool(use_trigger)
         self.data_path: str = str(data_path)
 
         self._trigger_callback: Callable = trigger_callback
@@ -46,8 +42,8 @@ class AbstractAnalysisUnit(threading.Thread):
         self._trigger: bool = False
         self._recording: bool = False
 
-        if len(kwargs) > 1:
-            logger.debug(f"unused configuration parameters: {kwargs}")
+        if kwargs:
+            logger.debug("unused configuration parameters: %s", kwargs)
 
     @property
     def recording(self) -> bool:
@@ -60,7 +56,7 @@ class AbstractAnalysisUnit(threading.Thread):
         return self._trigger
 
     def _set_trigger(self, trigger, message):
-        logger.info(f"setting {self.__class__.__name__} trigger {trigger}: {message}")
+        logger.info("setting %s trigger %s: %s", self.__class__.__name__,  trigger, message)
         self._trigger = trigger
         self._trigger_callback(trigger, message)
 
@@ -75,7 +71,7 @@ class AbstractAnalysisUnit(threading.Thread):
 
         The sensor instance requires to run.
         """
-        logger.warning(f"{self.__class__.__name__}.start_recording() is not implemented.")
+        logger.warning("%s.start_recording() is not implemented.", self.__class__.__name__)
 
     def stop_recording(self):
         """Stop recording of the sensor.
@@ -83,7 +79,7 @@ class AbstractAnalysisUnit(threading.Thread):
         The sensor instance requires to run and a recording needs to be
         running.
         """
-        logger.warning(f"{self.__class__.__name__}.stop_recording() is not implemented.")
+        logger.warning("%s.stop_recording() is not implemented.", self.__class__.__name__)
 
     def get_status(self) -> Dict:
         return {
@@ -122,7 +118,7 @@ class CameraAnalysisUnit(AbstractAnalysisUnit):
         self.light.on()
 
         logger.info("Starting camera recording")
-        with open("/var/www/html/FIFO1", "w") as f:
+        with open("/var/www/html/FIFO1", "w", encoding="ascii") as f:
             f.write("1")
 
         timer = threading.Timer(1.0, self.observe_camera_started)
@@ -132,7 +128,7 @@ class CameraAnalysisUnit(AbstractAnalysisUnit):
 
     def stop_recording(self):
         logger.info("Stopping camera recording")
-        with open("/var/www/html/FIFO1", "w") as f:
+        with open("/var/www/html/FIFO1", "w", encoding="ascii") as f:
             f.write("0")
 
         logger.info("Powering light off")
@@ -151,19 +147,15 @@ class CameraAnalysisUnit(AbstractAnalysisUnit):
 
     def observe_camera(self, pattern):
         every_thing_is_fine = False
-        with open("/var/www/html/scheduleLog.txt", "r") as f:
+        with open("/var/www/html/scheduleLog.txt", "r", encoding="ascii") as f:
             last_three_lines = f.readlines()[-self.number_of_lines_to_observe:]
             for line in last_three_lines:
-                logger.debug(f"checked line: {line} for pattern: {pattern}")
+                logger.debug("checked line %s for pattern: %s", line, pattern)
                 if pattern in line:
-                    logger.info("Found pattern in log")
                     every_thing_is_fine = True
         if not every_thing_is_fine:
-            self.fix_not_working_camera()
-
-    def fix_not_working_camera(self):
-        logger.warning("try to fix camera behaviour")
-        os.system('sudo reboot')
+            logger.warning("camera seems broken, Terminating.")
+            exit(1)
 
 
 class AudioAnalysisUnit(AbstractAnalysisUnit):
@@ -208,7 +200,7 @@ class AudioAnalysisUnit(AbstractAnalysisUnit):
         self.noise_blocks_max: float = float(noise_threshold_s) / input_block_duration
 
         self.freq_bins_hz = np.arange((self.input_frames_per_block / 2) + 1) / (
-                    self.input_frames_per_block / float(self.sampling_rate))
+            self.input_frames_per_block / float(self.sampling_rate))
 
         self.frame_count = 0
 
@@ -251,11 +243,10 @@ class AudioAnalysisUnit(AbstractAnalysisUnit):
 
         while stream.is_active() and self._running:
             time.sleep(2)
-            logger.info(f"houston we had {self.frame_count} frames")
+            logger.debug("received %s frames", self.frame_count)
             if self.frame_count == 0:
-                logger.warning("houston we have a problem! No frames are arriving...")
-                logger.warning("Shutting down to come up well again...")
-                subprocess.Popen(["sudo uhubctl -a cycle -p 3 -l 1-1"], shell=True)
+                logger.warning("received no frames, power cycling usb ")
+                subprocess.check_output(["sudo uhubctl -a cycle -p 3 -l 1-1"], shell=True)
                 break
             self.frame_count = 0
 
@@ -267,7 +258,7 @@ class AudioAnalysisUnit(AbstractAnalysisUnit):
         stream.close()
         self.pa.terminate()
 
-        logger.info(f"{self.__class__.__name__} termination finished")
+        logger.info("termination finished", self.__class__.__name__)
 
     def start_recording(self):
         if not self.wave_export_len:
@@ -297,11 +288,11 @@ class AudioAnalysisUnit(AbstractAnalysisUnit):
         """
         for device_index in range(self.pa.get_device_count()):
             dev_info = self.pa.get_device_info_by_index(device_index)
-            logger.debug(f"Device {device_index}: {dev_info['name']}")
+            logger.debug("Device %s: %s", device_index, dev_info['name'])
 
             for keyword in ["mic", "input"]:
                 if keyword in dev_info["name"].lower():
-                    logger.info(f"Found an input: device {device_index} - {dev_info['name']}")
+                    logger.info("Found an input: device %s - %s", device_index, dev_info['name'])
                     return device_index
 
         logger.info("No preferred input found; using default input device.")
@@ -327,7 +318,7 @@ class AudioAnalysisUnit(AbstractAnalysisUnit):
             # ping detection; a ping has to be a noisy sequence which is not
             # longer than self.noise_blocks_max
             if 1 <= self.__noise_blocks <= self.noise_blocks_max:
-                logger.info(f"ping {self.__pings}")
+                logger.info("detected ping %s", self.__pings)
                 self.__pings += 1
 
             # set trigger and callback
@@ -380,7 +371,7 @@ class AudioAnalysisUnit(AbstractAnalysisUnit):
         bin_peak_index = dbfs_spectrum.argmax()
         peak_db = dbfs_spectrum[bin_peak_index]
         peak_frequency_hz = bin_peak_index * self.sampling_rate / self.input_frames_per_block
-        logger.debug(f"Peak freq hz: {peak_frequency_hz} dBFS: {peak_db}")
+        logger.debug("Peak freq hz: %s dBFS: %s", peak_frequency_hz, peak_db)
         return peak_db, peak_frequency_hz
 
 
@@ -392,7 +383,7 @@ class WaveWriter(threading.Thread):
         start_time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
         file_path = os.path.join(aau.data_path, start_time_str + ".wav")
 
-        logger.info(f"creating wav file '{file_path}'")
+        logger.info("creating wav file '%s'", file_path)
         self.__wave = wave.open(file_path, "wb")
         self.__wave.setnchannels(1)
         self.__wave.setsampwidth(aau.pa.get_sample_size(pyaudio.paInt16))
@@ -425,7 +416,7 @@ class WaveWriter(threading.Thread):
             self.__wave_finalize()
             self.start()
 
-        logger.debug(f"writing frame, len: {len(frame)}")
+        logger.debug("writing frame, len: %s", len(frame))
         self.__wave.writeframes(frame)
 
     def __wave_finalize(self):
@@ -504,7 +495,7 @@ class VHFAnalysisUnit(AbstractAnalysisUnit):
         self.mqtt_host = str(mqtt_host)
         self.mqtt_port = int(mqtt_port)
         self.mqtt_keepalive = int(mqtt_keepalive)
-        self.mqttc = mqtt.Client(client_id=f"{platform.node()}-BatRack", clean_session=False, userdata=self)
+        self.mqttc = mqtt.Client(client_id=f"{platform.node()}-batrack", clean_session=False, userdata=self)
 
         self.untrigger_ts = time.time()
 
@@ -523,7 +514,7 @@ class VHFAnalysisUnit(AbstractAnalysisUnit):
         station, _, _, _ = message.topic.split("/")
 
         msig = MatchedSignal(["0"], *matched_list)
-        logging.debug(f"Received {msig}")
+        logger.debug("Received %s", msig)
 
         # helper method to retrieve the signal list
         def get_freqs_list(freq: int) -> Tuple[Optional[float], List[Tuple[datetime.datetime, float]]]:
@@ -576,13 +567,13 @@ class VHFAnalysisUnit(AbstractAnalysisUnit):
 
     @staticmethod
     def on_connect(mqttc: mqtt.Client, self, flags, rc):
-        logging.info(f"MQTT connection established ({rc})")
+        logger.info("MQTT connection established (%s)", rc)
 
         # subscribe to match signal cbor messages
         topic_matched_cbor = "+/radiotracking/matched/cbor"
         mqttc.subscribe(topic_matched_cbor)
         mqttc.message_callback_add(topic_matched_cbor, self.on_matched_cbor)
-        logging.info(f"Subscribed to {topic_matched_cbor}")
+        logger.info("Subscribed to %s", topic_matched_cbor)
 
     def run(self):
         self._running = True
@@ -590,7 +581,7 @@ class VHFAnalysisUnit(AbstractAnalysisUnit):
 
         ret = self.mqttc.connect(self.mqtt_host, self.mqtt_port, self.mqtt_keepalive)
         if ret != mqtt.MQTT_ERR_SUCCESS:
-            logging.critical(f"MQTT connetion failed: {ret}")
+            logger.critical(f"MQTT connetion failed: %s", ret)
 
         while self._running:
             self.mqttc.loop(0.1)
@@ -599,4 +590,3 @@ class VHFAnalysisUnit(AbstractAnalysisUnit):
                     self._set_trigger(False, "vhf, timeout")
 
         self.mqttc.disconnect()
-
