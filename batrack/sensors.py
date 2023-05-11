@@ -102,7 +102,7 @@ class CameraAnalysisUnit(AbstractAnalysisUnit):
         self.number_of_lines_to_observe = 5
 
         # initialize GPIO communication
-        self.light: gpiozero.LED = gpiozero.LED(light_pin, active_high=False)
+        self.light: gpiozero.LED = gpiozero.LED(light_pin, active_high=True)
 
     def run(self):
         self._running = True
@@ -258,7 +258,7 @@ class AudioAnalysisUnit(AbstractAnalysisUnit):
         stream.close()
         self.pa.terminate()
 
-        logger.info("termination finished", self.__class__.__name__)
+        logger.info("termination finished")
 
     def start_recording(self):
         if not self.wave_export_len:

@@ -11,12 +11,12 @@ with open('LICENSE') as f:
 
 setup(
     name='batrack',
-    version='0.2.0',
+    version='0.3.0',
     description='Sense and record bats based on visuals, audio and VHF signals',
     long_description=readme,
     author='Patrick Lampe, Jonas Höchst',
     author_email='lampep@mathematik.uni-marburg.de, hoechst@mathematik.uni-marburg.de',
-    url='https://github.com/Nature40/BatRack/',
+    url='https://github.com/tRackIT-Systems/BatRack/',
     install_requires=requirements,
     license=license,
     packages=find_packages(exclude=('tests', 'docs', 'etc')),
