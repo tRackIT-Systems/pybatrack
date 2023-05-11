@@ -150,7 +150,7 @@ class BatRack(threading.Thread):
             else:
                 [unit.stop_recording() for unit in self._units]
                 logger.info("System un-triggered, stopping recordings")
-                list_of_files = glob.glob('/var/www/html/media/*.h264')
+                list_of_files = glob.glob('/var/www/html/media/*')
                 latest_file = max(list_of_files, key=os.path.getctime)
                 self.mqtt_client.publish(f"{self.topic_prefix}/latest_video_file", latest_file)
 
