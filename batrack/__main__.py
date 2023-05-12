@@ -178,18 +178,18 @@ class BatRack(threading.Thread):
 
         self.mqtt_client.disconnect()
 
-        logger.info(f"BatRack [{self.name}] finished")
+        logger.info("BatRack [%s] finished", self.name)
 
     def stop(self):
         """
         stops all streams, clean up state and set the gpio to low
         :return:
         """
-        logger.info(f"Stopping [{self.name}] and respective sensor instances")
+        logger.info("Stopping [%s] and respective sensor instances", self.name)
         self._running = False
 
         [unit.stop() for unit in self._units]
-        logger.info(f"Finished cleaning [{self.name}] sensors")
+        logger.info("Finished cleaning [%s] sensors", self.name)
 
         self.join()
 
@@ -266,7 +266,7 @@ if __name__ == "__main__":
             logger.error("[%s] is missing a %s time, please check the configuration file (%s).", k, e, args.configfile)
             sys.exit(1)
         except schedule.ScheduleValueError as e:
-            logger.error("[Ts] %s, please check the configuration file (%s).", k, e, args.configfile)
+            logger.error("[%s] %s, please check the configuration file (%s).", k, e, args.configfile)
             sys.exit(1)
 
     running = True

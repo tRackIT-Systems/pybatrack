@@ -581,7 +581,7 @@ class VHFAnalysisUnit(AbstractAnalysisUnit):
 
         ret = self.mqttc.connect(self.mqtt_host, self.mqtt_port, self.mqtt_keepalive)
         if ret != mqtt.MQTT_ERR_SUCCESS:
-            logger.critical(f"MQTT connetion failed: %s", ret)
+            logger.critical("MQTT connetion failed: %s", ret)
 
         while self._running:
             self.mqttc.loop(0.1)
