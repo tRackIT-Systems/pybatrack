@@ -54,7 +54,7 @@ class BatRack(threading.Thread):
         os.makedirs(self.data_path, exist_ok=True)
         logger.debug("Data path: %s", self.data_path)
         start_time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
-        self.csvfile = open(os.path.join(self.data_path, f"{start_time_str}_{self.name}.csv"), "w")
+        self.csvfile = open(os.path.join(self.data_path, f"{start_time_str}_{self.name}.csv"), "w", encoding="utf-8")
         self.csv = csv.writer(self.csvfile)
 
         # create instance variables
@@ -71,7 +71,7 @@ class BatRack(threading.Thread):
         use_trigger_audio = strtobool(use_trigger_audio) if isinstance(use_trigger_audio, str) else bool(use_trigger_audio)
         use_trigger_camera = strtobool(use_trigger_camera) if isinstance(use_trigger_camera, str) else bool(use_trigger_camera)
 
-        self.always_on: Union[bool, Literal[0, 1]] = strtobool(always_on) if isinstance(always_on, str) else bool(always_on)
+        self.always_on: bool = bool(strtobool(always_on)) if isinstance(always_on, str) else bool(always_on)
 
         self.mqtt_host = str(mqtt_host)
         self.mqtt_port = int(mqtt_port)
@@ -118,22 +118,12 @@ class BatRack(threading.Thread):
         self._trigger: bool = False
 
     def evaluate_triggers(self, callback_trigger: bool, message: str) -> bool:
-        now_time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
-        self.csv.writerow([now_time_str, callback_trigger, message])
+        calling_class = inspect.stack()[1][0].f_locals["self"].__class__.__name__
+        self.csv.writerow([datetime.datetime.now(), calling_class, callback_trigger, message])
         self.csvfile.flush()
 
-        if self.always_on:
-            trigger = True
-        else:
-            trigger = False
-
-        # if any of the used triggers fires, the system trigger is set
-        for unit in self._units:
-            logger.debug("trigger evaluation %s use_trigger: %s, trigger: %s", unit.__class__.__name__, unit.use_trigger, unit.trigger)
-            if unit.use_trigger:
-                if unit.trigger:
-                    trigger = True
-
+        # if always on OR any of the used triggers fires, the system trigger is set
+        trigger = self.always_on or any([unit.use_trigger and unit.trigger for unit in self._units])
         logger.debug("trigger evaluation, current state: %s", trigger)
 
         # start / stop recordings if the system trigger changed

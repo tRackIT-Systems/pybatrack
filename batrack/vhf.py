@@ -151,7 +151,8 @@ class VHFAnalysisUnit(AbstractAnalysisUnit):
         # this could lead to decreasing of untrigger_ts, which could be avoided by calling max(untrigger_ts_old, ..._new)
         # if this is correct the 'sigs[:] = [sig for sig in sigs if sig[0] > sig_start]' statement should also be incorrect in some cases
         self.untrigger_ts = time.time() + self.untrigger_duration_s
-        self._set_trigger(True, f"vhf, {frequency_mhz:.3f} MHz, {msig._avgs[0]:.3f} dBW, {count} sigs")
+        self._set_trigger(True, f"{frequency_mhz:.3f} MHz, {msig._avgs[0]:.3f} dBW, {count} sigs")
+        self._set_trigger(True, f"{frequency_mhz:.3f} MHz, {msig._avgs[0]:.3f} dBW, {count} sigs")
 
     @staticmethod
     def on_connect(mqttc: mqtt.Client, self, flags, rc):
@@ -175,6 +176,6 @@ class VHFAnalysisUnit(AbstractAnalysisUnit):
             self.mqttc.loop(0.1)
             if self.untrigger_ts < time.time():
                 if self._trigger:
-                    self._set_trigger(False, "vhf, timeout")
+                    self._set_trigger(False, "timeout")
 
         self.mqttc.disconnect()
