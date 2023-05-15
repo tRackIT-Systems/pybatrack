@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import pyaudio
 import subprocess
+import socket
 import threading
 import datetime
 import wave
@@ -241,7 +242,7 @@ class WaveWriter(threading.Thread):
         self.aau: AudioAnalysisUnit = aau
 
         start_time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
-        file_path = os.path.join(aau.data_path, start_time_str + ".wav")
+        file_path = os.path.join(aau.data_path, socket.gethostname() + "_" + start_time_str + ".wav")
 
         logger.info("creating wav file '%s'", file_path)
         self.__wave = wave.open(file_path, "wb")

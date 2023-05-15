@@ -54,7 +54,7 @@ class BatRack(threading.Thread):
         os.makedirs(self.data_path, exist_ok=True)
         logger.debug("Data path: %s", self.data_path)
         start_time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
-        self.csvfile = open(os.path.join(self.data_path, f"{start_time_str}_{self.name}.csv"), "w", encoding="utf-8")
+        self.csvfile = open(os.path.join(self.data_path, f"{socket.gethostname()}_{start_time_str}_{self.name}.csv"), "w", encoding="utf-8")
         self.csv = csv.writer(self.csvfile)
 
         # create instance variables
@@ -137,9 +137,6 @@ class BatRack(threading.Thread):
             else:
                 logger.info("System un-triggered, stopping recordings")
                 [unit.stop_recording() for unit in self._units]
-                list_of_files = glob.glob('/var/www/html/media/*')
-                latest_file = max(list_of_files, key=os.path.getctime)
-                self.mqtt_client.publish(f"{self.topic_prefix}/latest_video_file", latest_file)
 
         return trigger
 
