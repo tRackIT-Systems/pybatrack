@@ -224,14 +224,12 @@ if __name__ == "__main__":
         instance.start()
         logger.info("[%s] started", k)
 
-    def stop_and_remove(k):
-        logger.info("[%s] stopping instance", k)
+    def stop_and_remove():
         global instance
         if instance:
             instance.stop()
             instance = None
             lock.release()
-        logger.info("[%s] stopped", k)
 
     config_has_runs = 0
     now = datetime.datetime.now()
@@ -251,7 +249,7 @@ if __name__ == "__main__":
             logger.info("[%s] running from %s to %s", k, run_config['start'], run_config['stop'])
 
             start_s.do(create_and_run, config, k, run_config)
-            stop_s.do(stop_and_remove, k)
+            stop_s.do(stop_and_remove)
 
             if now.time() > start_s.at_time:
                 if now.time() < stop_s.at_time:
@@ -270,12 +268,14 @@ if __name__ == "__main__":
     running = True
 
     # create a signal handler to terminate cleanly
-    def signal_handler(sig=None, frame=None):
-        logger.info("Caught SIGINT, terminating execution...")
+    def signal_handler(signal_value=None, frame=None):
+        sig = signal.Signals(signal_value)
         global running
-        running = False
+        if running:
+            logger.info("Caught %s, terminating execution...", sig.name)
+            running = False
 
-        stop_and_remove("SIGINT")
+            stop_and_remove()
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)

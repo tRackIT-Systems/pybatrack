@@ -30,46 +30,59 @@ class CameraAnalysisUnit(AbstractAnalysisUnit):
             logger.debug("sensor running")
             time.sleep(1)
 
+        self.light.close()
+
     def start_recording(self):
-        logger.info("Powering light on")
-        self.light.on()
+        if not self._recording:
+            logger.info("Powering light on")
+            self.light.on()
 
-        logger.info("Starting camera recording")
-        with open("/var/www/html/FIFO1", "w", encoding="ascii") as f:
-            f.write("1")
+            logger.info("Starting camera recording")
+            with open("/var/www/html/FIFO1", "w", encoding="ascii") as f:
+                f.write("1")
 
-        timer = threading.Timer(1.0, self.observe_camera_started)
-        timer.start()
+            timer = threading.Timer(1.0, self.observe_camera_started)
+            timer.start()
 
-        self._recording = True
+            self._recording = True
+        else:
+            logger.info("Starting camera recording: ignored, camera already recording")
 
     def stop_recording(self):
-        logger.info("Stopping camera recording")
-        with open("/var/www/html/FIFO1", "w", encoding="ascii") as f:
-            f.write("0")
+        if self._recording:
+            logger.info("Stopping camera recording")
+            with open("/var/www/html/FIFO1", "w", encoding="ascii") as f:
+                f.write("0")
 
-        logger.info("Powering light off")
-        self.light.off()
+            logger.info("Powering light off")
+            self.light.off()
 
-        timer = threading.Timer(1.0, self.observe_camera_stopped)
-        timer.start()
+            timer = threading.Timer(1.0, self.observe_camera_stopped)
+            timer.start()
 
-        self._recording = False
+            self._recording = False
+        else:
+            logger.debug("Stopping camera recording: ignored, camera not recording")
 
     def observe_camera_stopped(self):
-        self.observe_camera("Capturing stopped")
+        tail = self.schedule_log_tail()
+        pattern_found = any(["Capturing stopped" in line for line in tail])
+
+        if pattern_found:
+            logger.info("Confirmed capturing stopped.")
+        else:
+            logger.warning("Capturing stopped NOT confirmed, ignoring.")
 
     def observe_camera_started(self):
-        self.observe_camera("Capturing started")
+        tail = self.schedule_log_tail()
+        pattern_found = any(["Capturing started" in line for line in tail])
 
-    def observe_camera(self, pattern):
-        every_thing_is_fine = False
-        with open("/var/www/html/scheduleLog.txt", "r", encoding="ascii") as f:
-            last_three_lines = f.readlines()[-self.number_of_lines_to_observe:]
-            for line in last_three_lines:
-                logger.debug("checked line %s for pattern: %s", line, pattern)
-                if pattern in line:
-                    every_thing_is_fine = True
-        if not every_thing_is_fine:
-            logger.warning("camera seems broken, Terminating.")
+        if pattern_found:
+            logger.info("Confirmed capturing started.")
+        else:
+            logger.warning("Capturing started NOT confirmed, terminating.")
             exit(1)
+
+    def schedule_log_tail(self):
+        with open("/var/www/html/scheduleLog.txt", "r", encoding="ascii") as f:
+            return f.readlines()[-self.number_of_lines_to_observe:]
