@@ -19,7 +19,10 @@ import paho.mqtt.client as mqtt
 
 import schedule
 
-from batrack.sensors import AudioAnalysisUnit, CameraAnalysisUnit, VHFAnalysisUnit, AbstractAnalysisUnit
+from batrack.sensors import AbstractAnalysisUnit
+from batrack.audio import AudioAnalysisUnit
+from batrack.vhf import VHFAnalysisUnit
+from batrack.video import CameraAnalysisUnit
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +77,10 @@ class BatRack(threading.Thread):
         self.mqtt_host = str(mqtt_host)
         self.mqtt_port = int(mqtt_port)
         self.mqtt_keepalive = int(mqtt_keepalive)
-        self.mqtt_client = mqtt.Client(client_id=f"{platform.node()}-Trigger", clean_session=False, userdata=self)
-        self.mqtt_client.on_publish = self.on_publish
+        self.mqtt_client = mqtt.Client(client_id=f"{platform.node()}-batrack", clean_session=False, userdata=self)
         self.mqtt_client.connect(self.mqtt_host, port=self.mqtt_port)
         self.mqtt_client.loop_start()
-        self.topic_prefix = f"{platform.node()}/mqttutil/trigger"
+        self.topic_prefix = f"{platform.node()}/batrack"
 
         # setup vhf
         self.vhf: VHFAnalysisUnit
@@ -116,10 +118,6 @@ class BatRack(threading.Thread):
         self._running: bool = False
         self._trigger: bool = False
 
-    @staticmethod
-    def on_publish(*args):
-        logger.info("data published: %s", args)
-
     def evaluate_triggers(self, callback_trigger: bool, message: str) -> bool:
         now_time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
         self.csv.writerow([now_time_str, callback_trigger, message])
@@ -143,13 +141,13 @@ class BatRack(threading.Thread):
         if trigger != self._trigger:
             self._trigger = trigger
             if trigger:
-                [unit.start_recording() for unit in self._units]
                 logger.info("System triggered, starting recordings")
+                [unit.start_recording() for unit in self._units]
                 calling_class = inspect.stack()[1][0].f_locals["self"].__class__.__name__
                 self.mqtt_client.publish(f"{self.topic_prefix}/{calling_class}", message)
             else:
-                [unit.stop_recording() for unit in self._units]
                 logger.info("System un-triggered, stopping recordings")
+                [unit.stop_recording() for unit in self._units]
                 list_of_files = glob.glob('/var/www/html/media/*')
                 latest_file = max(list_of_files, key=os.path.getctime)
                 self.mqtt_client.publish(f"{self.topic_prefix}/latest_video_file", latest_file)
