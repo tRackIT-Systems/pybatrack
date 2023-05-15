@@ -11,7 +11,6 @@ import socket
 import sys
 import threading
 import time
-import platform
 import glob
 from distutils.util import strtobool
 from typing import List, Union, Literal
@@ -51,7 +50,7 @@ class BatRack(threading.Thread):
         self.name: str = str(name)
 
         # add hostname and  data path
-        self.data_path: str = os.path.join(data_path, socket.gethostname(), self.__class__.__name__)
+        self.data_path: str = os.path.join(data_path, socket.gethostname(), "batrack")
         os.makedirs(self.data_path, exist_ok=True)
         logger.debug("Data path: %s", self.data_path)
         start_time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
@@ -77,10 +76,10 @@ class BatRack(threading.Thread):
         self.mqtt_host = str(mqtt_host)
         self.mqtt_port = int(mqtt_port)
         self.mqtt_keepalive = int(mqtt_keepalive)
-        self.mqtt_client = mqtt.Client(client_id=f"{platform.node()}-batrack", clean_session=False, userdata=self)
+        self.mqtt_client = mqtt.Client(client_id=f"{socket.gethostname()}-batrack", clean_session=False, userdata=self)
         self.mqtt_client.connect(self.mqtt_host, port=self.mqtt_port)
         self.mqtt_client.loop_start()
-        self.topic_prefix = f"{platform.node()}/batrack"
+        self.topic_prefix = f"{socket.gethostname()}/batrack"
 
         # setup vhf
         self.vhf: VHFAnalysisUnit

@@ -3,7 +3,7 @@ import time
 import json
 import numpy as np
 import logging
-import platform
+import socket
 import cbor2 as cbor
 from typing import List, Tuple, Dict, Optional
 
@@ -83,7 +83,7 @@ class VHFAnalysisUnit(AbstractAnalysisUnit):
         self.mqtt_host = str(mqtt_host)
         self.mqtt_port = int(mqtt_port)
         self.mqtt_keepalive = int(mqtt_keepalive)
-        self.mqttc = mqtt.Client(client_id=f"{platform.node()}-batrac-client", clean_session=False, userdata=self)
+        self.mqttc = mqtt.Client(client_id=f"{socket.gethostname()}-batrack-client", clean_session=False, userdata=self)
 
         self.untrigger_ts = time.time()
 
