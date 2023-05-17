@@ -3,6 +3,7 @@ import configparser
 import copy
 import csv
 import datetime
+import json
 import inspect
 import logging
 import os
@@ -11,9 +12,8 @@ import socket
 import sys
 import threading
 import time
-import glob
 from distutils.util import strtobool
-from typing import List, Union, Literal
+from typing import List, Union, Literal, Dict
 import paho.mqtt.client as mqtt
 
 import schedule
@@ -117,9 +117,17 @@ class BatRack(threading.Thread):
         self._running: bool = False
         self._trigger: bool = False
 
-    def evaluate_triggers(self, callback_trigger: bool, message: str) -> bool:
+    def evaluate_triggers(self, callback_trigger: bool, message: Dict) -> bool:
         calling_class = inspect.stack()[1][0].f_locals["self"].__class__.__name__
-        self.csv.writerow([datetime.datetime.now(), calling_class, callback_trigger, message])
+        msg_str = json.dumps(message)
+
+        # publish trigger event
+        mqtt_topic = f"{self.topic_prefix}/{calling_class}/{callback_trigger}"
+        logger.debug("mqtt publish %s: %s", mqtt_topic, msg_str)
+        self.mqtt_client.publish(mqtt_topic, msg_str)
+
+        # write trigger event in csv
+        self.csv.writerow([datetime.datetime.now(), calling_class, callback_trigger, msg_str])
         self.csvfile.flush()
 
         # if always on OR any of the used triggers fires, the system trigger is set
@@ -132,8 +140,6 @@ class BatRack(threading.Thread):
             if trigger:
                 logger.info("System triggered, starting recordings")
                 [unit.start_recording() for unit in self._units]
-                calling_class = inspect.stack()[1][0].f_locals["self"].__class__.__name__
-                self.mqtt_client.publish(f"{self.topic_prefix}/{calling_class}", message)
             else:
                 logger.info("System un-triggered, stopping recordings")
                 [unit.stop_recording() for unit in self._units]
@@ -147,7 +153,7 @@ class BatRack(threading.Thread):
         [unit.start() for unit in self._units if unit]
 
         # do an initial trigger evaluation, also starts recordings when no trigger is used at all
-        self.evaluate_triggers(False, "initial trigger")
+        self.evaluate_triggers(False, {})
 
         # print status reports
         while self._running:

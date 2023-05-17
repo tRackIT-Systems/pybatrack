@@ -1,7 +1,7 @@
 import logging
 import threading
 from distutils.util import strtobool
-from typing import Callable, Dict, Union, Literal, List
+from typing import Callable, Dict, Union, Literal
 
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class AbstractAnalysisUnit(threading.Thread):
         """Return trigger state based on this sensor."""
         return self._trigger
 
-    def _set_trigger(self, trigger, message):
+    def _set_trigger(self, trigger: bool, message: Dict):
         if self._trigger != trigger:
             logger.info("setting %s trigger %s: %s", self.__class__.__name__,  trigger, message)
             self._trigger = trigger
