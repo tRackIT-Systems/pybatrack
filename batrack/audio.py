@@ -188,7 +188,7 @@ class AudioAnalysisUnit(AbstractAnalysisUnit):
             # in the moment we done have a relay anymore we can delete the
             # lower boundary
             if 1 <= self.__pings and not self._trigger:
-                self._set_trigger(True, {"Pings": self.__pings, "Ping Frequency": peak_frequency_hz})
+                self._set_trigger(True, {"Pings": self.__pings, "Ping Frequency": peak_frequency_hz, "Ping Volume": peak_db})
 
             # stop audio if thresbold of quiet blocks is met
             if self.__quiet_blocks > self.quiet_blocks_max and self._trigger:
