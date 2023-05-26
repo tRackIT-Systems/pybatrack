@@ -5,6 +5,7 @@ import time
 import os
 import datetime
 import socket
+import glob
 
 from batrack.sensors import AbstractAnalysisUnit
 
@@ -105,6 +106,13 @@ class CameraAnalysisUnit(AbstractAnalysisUnit):
 
                     logger.info("Moving video from %s to %s", video_path, target_path)
                     os.rename(video_path, target_path)
+
+                    thumbnail_glob = f"{video_path}.*.th.jpg"
+                    thumbnail_paths = glob.glob(thumbnail_glob)
+                    logger.info("Removing thumbnails %s", thumbnail_paths)
+                    for th_path in thumbnail_paths:
+                        os.remove(th_path)
+
                     return
 
         logger.warning("Capturing stopped NOT confirmed, ignoring.")
