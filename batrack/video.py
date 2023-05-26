@@ -15,15 +15,18 @@ class CameraAnalysisUnit(AbstractAnalysisUnit):
     def __init__(self,
                  light_pin: int,
                  html_folder: str = "/var/www/html/",
+                 video_boxing_timeout_s: int = 60,
                  **kwargs):
         """Camera and light sensor, currently only supporting recording.
 
         Args:
             light_pin (int): GPIO pin to be used to controll the light.
+            video_boxing_timeout_s (int): Timeout in seconds to wait for boxing finished messages.
         """
         super().__init__(**kwargs)
         self.number_of_lines_to_observe = 5
         self.html_folder: str = html_folder
+        self.video_boxing_timeout_s: int = int(video_boxing_timeout_s)
 
         # initialize GPIO communication
         self.light: gpiozero.LED = gpiozero.LED(light_pin, active_high=True)
@@ -73,7 +76,7 @@ class CameraAnalysisUnit(AbstractAnalysisUnit):
             logger.debug("Stopping camera recording: ignored, camera not recording")
 
     def observe_camera_stopped(self):
-        timeout = time.time() + 15
+        timeout = time.time() + self.video_boxing_timeout_s
         with open(os.path.join(self.html_folder, "scheduleLog.txt"), "r", encoding="ascii") as f:
             f.seek(0, 2)
             while timeout > time.time():
