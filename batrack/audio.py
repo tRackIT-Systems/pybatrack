@@ -241,16 +241,10 @@ class WaveWriter(threading.Thread):
         super().__init__()
         self.aau: AudioAnalysisUnit = aau
 
-        start_time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
-        file_path = os.path.join(aau.data_path, socket.gethostname() + "_" + start_time_str + ".wav")
+        self.__wave: Optional[wave.Wave_write] = None
+        self.__wave_create()
 
-        logger.info("creating wav file '%s'", file_path)
-        self.__wave = wave.open(file_path, "wb")
-        self.__wave.setnchannels(1)
-        self.__wave.setsampwidth(aau.pa.get_sample_size(pyaudio.paInt16))
-        self.__wave.setframerate(aau.sampling_rate)
-
-        self._running = False
+        self._running: bool = False
         self.q: Queue = Queue()
 
     def stop(self):
@@ -269,13 +263,26 @@ class WaveWriter(threading.Thread):
 
         self.__wave_finalize()
 
+    def __wave_create(self):
+        if self.__wave:
+            raise FileExistsError("Wavefile already created.")
+
+        start_time_str = datetime.datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
+        file_path = os.path.join(self.aau.data_path, socket.gethostname() + "_" + start_time_str + ".wav")
+
+        logger.info("creating wav file '%s'", file_path)
+        self.__wave = wave.open(file_path, "wb")
+        self.__wave.setnchannels(1)
+        self.__wave.setsampwidth(self.aau.pa.get_sample_size(pyaudio.paInt16))
+        self.__wave.setframerate(self.aau.sampling_rate)
+
     def __wave_write(self, frame):
         remaining_length = int(self.aau.wave_export_len - self.__wave._nframeswritten)
 
         if len(frame) > remaining_length:
             logger.info("wave reached maximum, starting new file...")
             self.__wave_finalize()
-            self.start()
+            self.__wave_create()
 
         logger.debug("writing frame, len: %s", len(frame))
         self.__wave.writeframes(frame)
